@@ -55,7 +55,7 @@ const (
 
 var (
 	// These are variables (not constants) so that testcases can modify them
-	ovsRunDir string = "/var/run/openvswitch/"
+	ovsRunDir string = "/var/snap/microovn/common/run/switch/"
 	ovnRunDir string = "/var/run/ovn/"
 
 	savedOVSRunDir = ovsRunDir
