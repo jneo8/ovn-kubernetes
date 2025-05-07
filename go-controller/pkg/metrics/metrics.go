@@ -21,6 +21,7 @@ import (
 	"github.com/prometheus/client_golang/prometheus/promhttp"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	utilruntime "k8s.io/apimachinery/pkg/util/runtime"
+	"k8s.io/apimachinery/pkg/util/wait"
 	utilwait "k8s.io/apimachinery/pkg/util/wait"
 	"k8s.io/client-go/kubernetes"
 	"k8s.io/klog/v2"
@@ -560,8 +561,41 @@ func startMetricsServer(bindAddress, certFile, keyFile string, handler http.Hand
 	}()
 }
 
-func RegisterOvnMetrics(clientset kubernetes.Interface, k8sNodeName string, stopChan <-chan struct{}) {
-	go RegisterOvnDBMetrics(clientset, k8sNodeName, stopChan)
+func RegisterOvnMetrics(
+	clientset kubernetes.Interface, k8sNodeName string,
+	stopChan <-chan struct{},
+) {
+	go RegisterOvnDBMetrics(
+		func() bool {
+			err := wait.PollUntilContextTimeout(context.Background(), 1*time.Second, 300*time.Second, true, func(ctx context.Context) (bool, error) {
+				return checkPodRunsOnGivenNode(clientset, []string{"ovn-db-pod=true"}, k8sNodeName, false)
+			})
+			if err != nil {
+				if wait.Interrupted(err) {
+					klog.Errorf("Timed out while checking if OVN DB Pod runs on this %q K8s Node: %v. "+
+						"Not registering OVN DB Metrics on this Node.", k8sNodeName, err)
+				} else {
+					klog.Infof("Not registering OVN DB Metrics on this Node since OVN DBs are not running on this node.")
+				}
+				return false
+			}
+			return true
+		},
+		stopChan,
+	)
 	go RegisterOvnControllerMetrics(stopChan)
-	go RegisterOvnNorthdMetrics(clientset, k8sNodeName, stopChan)
+	go RegisterOvnNorthdMetrics(
+		func() bool {
+			err := wait.PollUntilContextTimeout(context.Background(), 1*time.Second, 300*time.Second, true, func(ctx context.Context) (bool, error) {
+				return checkPodRunsOnGivenNode(clientset, []string{"app=ovnkube-master", "name=ovnkube-master"}, k8sNodeName, true)
+			})
+			if err != nil {
+				klog.Infof("Not registering OVN North Metrics because OVNKube Master Pod was not found running on this "+
+					"node (%s)", k8sNodeName)
+				return false
+			}
+			return true
+		},
+		stopChan,
+	)
 }

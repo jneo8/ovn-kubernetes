@@ -1,7 +1,6 @@
 package metrics
 
 import (
-	"context"
 	"fmt"
 	"os"
 	"strconv"
@@ -10,8 +9,6 @@ import (
 
 	"github.com/ovn-org/ovn-kubernetes/go-controller/pkg/util"
 	"github.com/prometheus/client_golang/prometheus"
-	"k8s.io/apimachinery/pkg/util/wait"
-	"k8s.io/client-go/kubernetes"
 	"k8s.io/klog/v2"
 )
 
@@ -319,8 +316,38 @@ var (
 	sbDbSchemaVersion string
 )
 
+// getOVSRunDir returns OVS run directory from environment variable with default
+func getOVSRunDir() string {
+	ovsRunDir := os.Getenv("OVS_RUNDIR")
+	if ovsRunDir == "" {
+		ovsRunDir = "/var/run/openvswitch/"
+	}
+
+	// Ensure path ends with trailing slash
+	if !strings.HasSuffix(ovsRunDir, "/") {
+		ovsRunDir += "/"
+	}
+
+	return ovsRunDir
+}
+
+// getOVNRunDir returns OVN run directory from environment variable with default
+func getOVNRunDir() string {
+	ovnRunDir := os.Getenv("OVN_RUNDIR")
+	if ovnRunDir == "" {
+		ovnRunDir = "/var/run/ovn/"
+	}
+
+	// Ensure path ends with trailing slash
+	if !strings.HasSuffix(ovnRunDir, "/") {
+		ovnRunDir += "/"
+	}
+
+	return ovnRunDir
+}
+
 func getNBDBSockPath() (string, error) {
-	paths := []string{"/var/run/openvswitch/", "/var/run/ovn/"}
+	paths := []string{getOVSRunDir(), getOVNRunDir()}
 	for _, basePath := range paths {
 		if _, err := os.Stat(basePath + "ovnnb_db.sock"); err == nil {
 			klog.Infof("ovnnb_db.sock found at %s", basePath)
@@ -358,19 +385,12 @@ func getOvnDbVersionInfo() {
 	}
 }
 
-func RegisterOvnDBMetrics(clientset kubernetes.Interface, k8sNodeName string, stopChan <-chan struct{}) {
-	err := wait.PollUntilContextTimeout(context.Background(), 1*time.Second, 300*time.Second, true, func(ctx context.Context) (bool, error) {
-		return checkPodRunsOnGivenNode(clientset, []string{"ovn-db-pod=true"}, k8sNodeName, false)
-	})
-	if err != nil {
-		if wait.Interrupted(err) {
-			klog.Errorf("Timed out while checking if OVN DB Pod runs on this %q K8s Node: %v. "+
-				"Not registering OVN DB Metrics on this Node.", k8sNodeName, err)
-		} else {
-			klog.Infof("Not registering OVN DB Metrics on this Node since OVN DBs are not running on this node.")
-		}
+// func RegisterOvnDBMetrics(clientset kubernetes.Interface, k8sNodeName string, stopChan <-chan struct{}) {
+func RegisterOvnDBMetrics(waitTimeoutFunc func() bool, stopChan <-chan struct{}) {
+	if ok := waitTimeoutFunc(); !ok {
 		return
 	}
+
 	klog.Info("Found OVN DB Pod running on this node. Registering OVN DB Metrics")
 
 	// get the ovsdb server version info
