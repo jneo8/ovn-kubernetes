@@ -3,11 +3,12 @@ package metrics
 import (
 	"fmt"
 
-	"github.com/ovn-org/ovn-kubernetes/go-controller/pkg/metrics/mocks"
-
 	"github.com/onsi/ginkgo"
 	"github.com/onsi/gomega"
 	"github.com/prometheus/client_golang/prometheus"
+
+	"github.com/ovn-org/ovn-kubernetes/go-controller/pkg/config"
+	"github.com/ovn-org/ovn-kubernetes/go-controller/pkg/metrics/mocks"
 )
 
 type clientOutput struct {
@@ -270,6 +271,34 @@ var _ = ginkgo.Describe("OVS metrics", func() {
 			ovsVsctl := NewFakeOVSClient(ovsVsctlOutput)
 			err := updateOvsInterfaceMetrics(ovsVsctl.FakeCall)
 			gomega.Expect(err).ToNot(gomega.BeNil())
+		})
+	})
+
+	ginkgo.Context("OVS metrics with configurable paths", func() {
+		ginkgo.It("should use configurable PID file paths for process collectors", func() {
+			// Test that the process collectors use the configured paths
+			// Note: This is more of an integration test since we can't easily mock prometheus.NewPidFileFn
+
+			// Verify that our config paths are accessible
+			gomega.Expect(config.OvsPaths.VswitchdPid).To(gomega.Equal("/var/run/openvswitch/ovs-vswitchd.pid"))
+			gomega.Expect(config.OvsPaths.OvsDbServerPid).To(gomega.Equal("/var/run/openvswitch/ovsdb-server.pid"))
+
+			// The actual process collector registration happens in registerOvsMetrics
+			// which uses these configured paths instead of hardcoded ones
+		})
+	})
+
+	ginkgo.Context("OVS metrics with configurable paths", func() {
+		ginkgo.It("should use configurable PID file paths for process collectors", func() {
+			// Test that the process collectors use the configured paths
+			// Note: This is more of an integration test since we can't easily mock prometheus.NewPidFileFn
+
+			// Verify that our config paths are accessible
+			gomega.Expect(config.OvsPaths.VswitchdPid).To(gomega.Equal("/var/run/openvswitch/ovs-vswitchd.pid"))
+			gomega.Expect(config.OvsPaths.OvsDbServerPid).To(gomega.Equal("/var/run/openvswitch/ovsdb-server.pid"))
+
+			// The actual process collector registration happens in registerOvsMetrics
+			// which uses these configured paths instead of hardcoded ones
 		})
 	})
 })

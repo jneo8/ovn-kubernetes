@@ -5,6 +5,7 @@ import (
 	"os"
 	"strings"
 
+	"github.com/ovn-org/ovn-kubernetes/go-controller/pkg/config"
 	"github.com/ovn-org/ovn-kubernetes/go-controller/pkg/util"
 	"github.com/urfave/cli/v2"
 	kexec "k8s.io/utils/exec"
@@ -40,21 +41,21 @@ func ovnControllerReadiness(target string) error {
 
 	// Ensure that the ovs-vswitchd and ovsdb-server processes that ovn-controller
 	// dependent on are running and you need to use ovs-appctl via the unix control path
-	ovsdbPid, err := os.ReadFile("/var/run/openvswitch/ovsdb-server.pid")
+	ovsdbPid, err := os.ReadFile(config.OvsPaths.OvsDbServerPid)
 	if err != nil {
 		return fmt.Errorf("failed to get pid for osvdb-server process: %v", err)
 	}
-	ctlFile := fmt.Sprintf("/var/run/openvswitch/ovsdb-server.%s.ctl", strings.Trim(string(ovsdbPid), " \n"))
+	ctlFile := fmt.Sprintf("%sovsdb-server.%s.ctl", config.OvsPaths.RunDir, strings.Trim(string(ovsdbPid), " \n"))
 	_, _, err = util.RunOVSAppctlWithTimeout(5, "-t", ctlFile, "ovsdb-server/list-dbs")
 	if err != nil {
 		return fmt.Errorf("failed retrieving list of databases from ovsdb-server: %v", err)
 	}
 
-	ovsPid, err := os.ReadFile("/var/run/openvswitch/ovs-vswitchd.pid")
+	ovsPid, err := os.ReadFile(config.OvsPaths.VswitchdPid)
 	if err != nil {
 		return fmt.Errorf("failed to get pid for ovs-vswitchd process: %v", err)
 	}
-	ctlFile = fmt.Sprintf("/var/run/openvswitch/ovs-vswitchd.%s.ctl", strings.Trim(string(ovsPid), " \n"))
+	ctlFile = fmt.Sprintf("%sovs-vswitchd.%s.ctl", config.OvsPaths.RunDir, strings.Trim(string(ovsPid), " \n"))
 	_, _, err = util.RunOVSAppctlWithTimeout(5, "-t", ctlFile, "ofproto/list")
 	if err != nil {
 		return fmt.Errorf("failed to retrieve ofproto instances from ovs-vswitchd: %v", err)
